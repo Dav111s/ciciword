@@ -1,0 +1,11 @@
+{
+    "current_book": "考研",
+    "study_group_size": 10,
+    "spelling_test_enabled": false,
+    "daily_new_word_limit": 0,
+    "bg_gradient": 0,
+    "study_duration": {
+        "date": "2026-09-03",
+        "seconds": 55
+    }
+}

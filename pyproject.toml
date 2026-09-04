@@ -1,0 +1,9 @@
+# 打包时 flet-cli 优先读取这里的最小依赖（而不是桌面 requirements.txt）。
+# 移动端只打包 flet：numpy/torch/onnxruntime 仅在已废弃的 ai/memory_model.py 中惰性引用，
+# 运行时缺包会自动回退到艾宾浩斯阶梯，无需打进 APK。
+[project]
+name = "ciciword"
+version = "0.1.0"
+dependencies = [
+    "flet==0.28.3",
+]
