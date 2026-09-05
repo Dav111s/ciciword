@@ -1,9 +1,8 @@
 # ui/review_page.py
 """复习模式：三档反馈（记住/模糊/忘记）+ 词义详情两阶段交互。
 
-- 记住：记忆概率上升、间隔拉长，移出队列。
-- 模糊：记忆概率适度下调、间隔中等，移出队列（下次提前复习）。
-- 忘记：记忆概率大幅下降、间隔缩短，换到队尾稍后重试（不退关卡）。
+- 答后：提示文字、释义、科目标签直接渲染到主单词卡片内部，不再单独弹出灰色卡片。
+- 底部按钮用 if 条件添加/移除到根 Column，不用 visible 隐藏（避免残留占位容器）。
 """
 import flet as ft
 
@@ -23,52 +22,77 @@ def build_review_page(page: ft.Page) -> ft.Control:
     title_text = ft.Text("复习模式", size=20, weight=ft.FontWeight.BOLD, color=TEXT_COLOR)
     remain_text = ft.Text("", size=13, color=ft.Colors.GREY)
 
+    # 主单词卡片（唯一卡片容器）：英文 + 答后追加 提示/释义/标签
     word_text = ft.Text("", size=26, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
-    word_card = glass(
-        ft.Column([word_text], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-        height=180, radius=20,
+    word_card_body = ft.Column(
+        [word_text],
+        alignment=ft.MainAxisAlignment.CENTER,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=6,
     )
+    word_card = glass(word_card_body, height=200, radius=20, padding=20)
 
     remember_btn = glass_button("记住🟢", lambda e: _answer(page, ReviewFeedback.REMEMBER), tint=ft.Colors.GREEN_400, opacity=0.32, text_color=ft.Colors.GREEN_900)
     hazy_btn = glass_button("模糊🟡", lambda e: _answer(page, ReviewFeedback.HAZY), tint=ft.Colors.AMBER_400, opacity=0.32, text_color=ft.Colors.AMBER_900)
     forget_btn = glass_button("忘记🔴", lambda e: _answer(page, ReviewFeedback.FORGET), tint=ft.Colors.RED_400, opacity=0.32, text_color=ft.Colors.RED_900)
     action_row = ft.Row([remember_btn, hazy_btn, forget_btn], alignment=ft.MainAxisAlignment.CENTER, spacing=12, wrap=True)
+    action_bar = ft.Container(content=action_row, padding=ft.padding.symmetric(vertical=12))
 
     status_text = ft.Text("请在无提示的情况下选择记住/模糊/忘记", size=14)
 
-    detail_switcher = ft.AnimatedSwitcher(
-        content=ft.Container(),
-        transition=ft.AnimatedSwitcherTransition.SCALE,
-        duration=350,
-        switch_in_curve=ft.AnimationCurve.EASE_OUT,
-        switch_out_curve=ft.AnimationCurve.EASE_IN,
-    )
-
     next_btn = glass_button("下一个", lambda e: _commit(page), tint=ft.Colors.GREEN_400, opacity=0.32, text_color=ft.Colors.GREEN_900)
-    bottom_bar = ft.Container(
-        content=ft.Row([next_btn], alignment=ft.MainAxisAlignment.CENTER),
-        padding=ft.padding.symmetric(vertical=12),
-        visible=False,
+    bottom_bar = ft.Container(content=ft.Row([next_btn], alignment=ft.MainAxisAlignment.CENTER), padding=ft.padding.symmetric(vertical=12))
+
+    header_row = ft.Row([back_btn, title_text], alignment=ft.MainAxisAlignment.START)
+
+    # 滚动区（不含底部按钮）
+    layout = ft.Column(
+        scroll=ft.ScrollMode.AUTO,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+        controls=[header_row, remain_text, word_card, status_text],
+        spacing=16,
     )
+    scroll_container = ft.Container(content=layout, expand=True, padding=ft.padding.symmetric(horizontal=16, vertical=12))
+
+    # 根 Column：只含滚动区，底部按钮按需 if 添加/移除
+    root_col = ft.Column([scroll_container], expand=True, spacing=0)
+
+    def _set_bottom(show_action=False, show_next=False):
+        """底部按钮条件渲染：重建 root_col.controls，不添加则不占位。
+
+        只改 children，不单独 update（由调用方 page.update() 统一刷新）。
+        """
+        root_col.controls = [scroll_container]
+        if show_action:
+            root_col.controls.append(action_bar)
+        if show_next:
+            root_col.controls.append(bottom_bar)
+
+    def _set_card_detail(controls):
+        """把答后内容合并进主单词卡片（不再新建灰色弹窗）。
+
+        只修改 children，不调用未挂载控件的 .update()（由调用方 page.update() 统一刷新），
+        避免路由初始加载时 word_card_body 尚未挂载就 update 触发 AssertionError。
+        """
+        word_card_body.controls = [word_text] + controls
 
     def _render():
         state = page.review_state
-        detail_switcher.content = ft.Container()
-        bottom_bar.visible = False
         state['_answered'] = False
+        _set_card_detail([])  # 重置卡片为纯英文
         if not state['queue']:
-            word_card.visible = False
-            action_row.visible = False
+            _set_bottom(False, False)
             remain_text.value = ""
             status_text.value = "🎉 今日复习已完成！"
+            word_card.visible = False  # 无词时隐藏卡片（内容卡，非底部占位）
             page.update()
             return
         word = state['queue'][state['index']]
         word_card.visible = True
-        action_row.visible = True
         word_text.value = word['word']
         remain_text.value = f"剩余 {len(state['queue'])} 个单词"
         status_text.value = "请在无提示的情况下选择记住/模糊/忘记"
+        _set_bottom(True, False)  # 显示 记住/模糊/忘记
         page.update()
 
     def _answer(page, feedback):
@@ -80,33 +104,21 @@ def build_review_page(page: ft.Page) -> ft.Control:
         word = state['queue'][state['index']]
 
         if feedback == ReviewFeedback.REMEMBER:
-            head, hcolor, tint = "✓ 记住", ft.Colors.GREEN_900, ft.Colors.GREEN_400
+            head, hcolor = "✓ 记住", ft.Colors.GREEN_900
         elif feedback == ReviewFeedback.HAZY:
-            head, hcolor, tint = "◐ 模糊", ft.Colors.AMBER_900, ft.Colors.AMBER_400
+            head, hcolor = "◐ 模糊", ft.Colors.AMBER_900
         else:
-            head, hcolor, tint = "✗ 忘记", ft.Colors.RED_900, ft.Colors.RED_400
+            head, hcolor = "✗ 忘记", ft.Colors.RED_900
 
-        action_row.visible = False
         tags = universe.get_stage_tags(word['word'])
-        detail_controls = [
+        detail = [
             ft.Text(head, size=17, weight=ft.FontWeight.BOLD, color=hcolor),
-            ft.Text(word['word'], size=22, weight=ft.FontWeight.BOLD),
             ft.Text(f"释义：{word['trans']}", size=15),
         ]
         if tags:
-            detail_controls.append(
-                ft.Text("  ".join(f"#{t}" for t in tags), size=13, color=SUB_TEXT_COLOR))
-        detail_switcher.content = glass(
-            ft.Column(
-                detail_controls,
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=6,
-            ),
-            tint=tint, opacity=0.32, radius=18, padding=18,
-        )
-        next_btn.visible = True
-        bottom_bar.visible = True
+            detail.append(ft.Text("  ".join(f"#{t}" for t in tags), size=13, color=SUB_TEXT_COLOR))
+        _set_card_detail(detail)   # 合并进主卡片
+        _set_bottom(False, True)   # 只显示 下一个
         page.update()
 
     def _commit(page):
@@ -120,10 +132,8 @@ def build_review_page(page: ft.Page) -> ft.Control:
         state['reviewed'][wid] = {'id': wid, 'word': word['word'], 'trans': word['trans']}
 
         if fb == ReviewFeedback.FORGET:
-            # 忘记：换到队尾稍后重试
             state['queue'].append(state['queue'].pop(state['index']))
         else:
-            # 记住/模糊：移出队列（SRS 已排期）
             state['queue'].pop(state['index'])
         if state['index'] >= len(state['queue']):
             state['index'] = 0
@@ -136,7 +146,6 @@ def build_review_page(page: ft.Page) -> ft.Control:
         state = page.review_state
         words = list(state['reviewed'].values())
         page.spelling_state = {'words': words, 'return_route': '/'}
-        # 复习完成后：样本充足且满足训练条件时，后台增量训练神经网络（不阻塞界面）
         try:
             from ai.memory_model import should_train, train_async
             if should_train():
@@ -150,31 +159,7 @@ def build_review_page(page: ft.Page) -> ft.Control:
 
     page.review_state['render'] = _render
 
-    layout = ft.Column(
-        scroll=ft.ScrollMode.AUTO,
-        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-        controls=[
-            ft.Row([back_btn, title_text], alignment=ft.MainAxisAlignment.START),
-            remain_text,
-            word_card,
-            action_row,
-            status_text,
-            detail_switcher,
-        ],
-        spacing=16,
-    )
-
-    return page_shell(
-        page,
-        ft.Column(
-            [
-                ft.Container(content=layout, expand=True, padding=ft.padding.symmetric(horizontal=16, vertical=12)),
-                bottom_bar,
-            ],
-            spacing=0,
-            expand=True,
-        ),
-    )
+    return page_shell(page, root_col)
 
 
 def load_review_data(page: ft.Page):

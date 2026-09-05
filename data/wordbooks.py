@@ -185,6 +185,36 @@ def add_word(name: str, word: str, trans: str, example: str = "") -> bool:
     return True
 
 
+def add_words_to_book(name: str, items) -> tuple:
+    """把 [(word, trans), ...] 追加到指定词本（去重：英文条目已存在则跳过）。
+
+    - 大小写不敏感去重（英文统一小写比较）。
+    - 返回 (saved, skipped)：成功写入条数、因重复跳过的条数。
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    existing = {r[0].lower() for r in cur.execute(
+        "SELECT word FROM words WHERE book_name=?", (name,)).fetchall()}
+    saved = skipped = 0
+    for word, trans in items:
+        w = (word or '').strip().lower()
+        t = (trans or '').strip()
+        if not w or not t:
+            continue
+        if w in existing:
+            skipped += 1
+            continue
+        cur.execute(
+            "INSERT INTO words (word, trans, book_name, create_day, next_review_day, is_builtin) "
+            "VALUES (?, ?, ?, date('now'), date('now'), 0)",
+            (w, t, name))
+        existing.add(w)
+        saved += 1
+    conn.commit()
+    conn.close()
+    return saved, skipped
+
+
 def delete_word(word_id: int):
     conn = get_connection()
     conn.execute("DELETE FROM words WHERE id=? AND is_builtin=0", (word_id,))

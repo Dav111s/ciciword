@@ -28,3 +28,9 @@ gradle.properties
 #测试文档
 test/
 z_docs/
+
+# ==========运行时生成，严禁提交git==========
+vocab.db
+batch_state.json
+summary_state.json
+*.tmp

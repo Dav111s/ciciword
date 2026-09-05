@@ -7,3 +7,8 @@ version = "0.1.0"
 dependencies = [
     "flet==0.28.3",
 ]
+
+# Android 打包配置：显式关闭 Impeller，强制使用 Skia 渲染，
+# 规避部分设备后台恢复画布黑屏（切后台切回黑屏）问题。
+[tool.flet.android]
+meta_data = { "io.flutter.embedding.android.EnableImpeller" = "false" }

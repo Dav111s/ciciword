@@ -41,35 +41,40 @@ def main(page: ft.Page):
     # 首次运行自动生成内置词本（考研/四级/六级/高考/中考）+ 导入单词
     wordbooks.init_wordbooks()
 
+    # 预渲染根容器：只添加一次，切换页面时仅替换 content，避免整体销毁重建导致黑屏闪烁
+    root = ft.Container(expand=True, bgcolor=ft.Colors.PURPLE_50)
+    page.add(root)
+
     def route_change(route):
-        page.clean()
+        # 只替换根容器内容，不做 page.clean() 整体销毁
         if page.route == "/":
-            page.add(build_home_page(page))
+            root.content = build_home_page(page)
         elif page.route == "/wordbook":
-            page.add(build_wordbook_page(page))
+            root.content = build_wordbook_page(page)
             refresh_wordbook_page(page)
         elif page.route == "/batch":
-            page.add(build_batch_page(page))
+            root.content = build_batch_page(page)
         elif page.route == "/book_detail":
-            page.add(build_vocab_book_detail_page(page))
+            root.content = build_vocab_book_detail_page(page)
         elif page.route == "/favorites":
-            page.add(build_favorites_page(page))
+            root.content = build_favorites_page(page)
         elif page.route == "/learn":
-            page.add(build_learn_page(page))
+            root.content = build_learn_page(page)
             load_learn_data(page)
         elif page.route == "/review":
-            page.add(build_review_page(page))
+            root.content = build_review_page(page)
             load_review_data(page)
         elif page.route == "/spelling":
-            page.add(build_spelling_page(page))
+            root.content = build_spelling_page(page)
         elif page.route == "/summary":
-            page.add(build_group_summary_page(page))
+            root.content = build_group_summary_page(page)
         elif page.route == "/learn_stats":
-            page.add(build_stats_finish_page(page))
+            root.content = build_stats_finish_page(page)
         elif page.route == "/settings":
-            page.add(build_settings_page(page))
+            root.content = build_settings_page(page)
         elif page.route == "/stats":
-            page.add(build_stats_page(page))
+            root.content = build_stats_page(page)
+        page.update()
 
     page.on_route_change = route_change
     page.go("/")
