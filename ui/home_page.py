@@ -34,7 +34,7 @@ def build_home_page(page: ft.Page) -> ft.Control:
 
     main_content = ft.Column(
         [
-            ft.Text("萃词 Lexera by Dav1s", size=24, weight=ft.FontWeight.BOLD, color=TEXT_COLOR),
+            ft.Text("萃词 CICIWORD", size=24, weight=ft.FontWeight.BOLD, color=TEXT_COLOR),
             ft.Text(book_display, size=14, color=SUB_TEXT_COLOR),
             ft.Container(height=24),
             _big_btn("Learn", f"待学习 {learn_count} 个新词", "/learn"),
